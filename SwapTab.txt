@@ -1,0 +1,74 @@
+ref NppPluginTemplate dl fr http://download.tuxfamily.org/nppplugins/NppPluginTemplate/NppPluginTemplate.zip
+ref npp project TabBarPlus::exchangeItemData() in TabBar.cpp
+Q: Why use plugin instead of external exe to send message?
+A: parameter pointer address is NOT cross-process!
+
+//-------------------------------------//
+//-- STEP 1. DEFINE YOUR PLUGIN NAME --//
+//-------------------------------------//
+const TCHAR NPP_PLUGIN_NAME[] = TEXT("Swap Tabs");
+
+    //--------------------------------------------//
+    //-- STEP 3. CUSTOMIZE YOUR PLUGIN COMMANDS --//
+    //--------------------------------------------//
+    setCommand(0, TEXT("Swap With Previous Tab"), SwapPrev, NULL, false);
+    setCommand(1, TEXT("Swap With Next Tab"), SwapNext, NULL, false);
+
+//----------------------------------------------//
+//-- STEP 4. DEFINE YOUR ASSOCIATED FUNCTIONS --//
+//----------------------------------------------//
+#define NOTEPADPLUS_USER_INTERNAL     (WM_USER + 0000)
+#define NPPM_INTERNAL_DOCORDERCHANGED			(NOTEPADPLUS_USER_INTERNAL + 32)
+BOOL CALLBACK SwapTab(HWND hwnd, LPARAM param)
+{
+	wchar_t name[256];
+	GetClassNameW(hwnd, name, sizeof(name)/sizeof(*name));
+	if (wcscmp(name, L"SysTabControl32") != 0)
+		return TRUE;
+	if (!IsWindowVisible(hwnd))
+		return TRUE;
+	//found
+
+	int count = TabCtrl_GetItemCount(hwnd);
+	if (count <= 1)
+		return FALSE;
+
+	int src_id = TabCtrl_GetCurSel(hwnd);
+	int dst_id = src_id + (int)param;
+	if (dst_id < 0)
+		dst_id = count - 1;
+	if (dst_id >= count)
+		dst_id = 0;
+
+	//exchangeItemData
+	TabCtrl_SetCurSel(hwnd, dst_id);
+
+	TCITEMW item1, item2;
+	item1.mask = item2.mask = TCIF_IMAGE | TCIF_TEXT | TCIF_PARAM;
+	
+	const int len = 256;
+	wchar_t str1[len];
+	wchar_t str2[len];
+	item1.pszText = str1;
+	item1.cchTextMax = len;
+	item2.pszText = str2;
+	item2.cchTextMax = len;
+	TabCtrl_GetItem(hwnd, src_id, &item1);
+	TabCtrl_GetItem(hwnd, dst_id, &item2);
+	TabCtrl_SetItem(hwnd, src_id, &item2);
+	TabCtrl_SetItem(hwnd, dst_id, &item1);
+	// Tell Notepad_plus to notifiy plugins that a D&D operation was done (so doc index has been changed)
+	::SendMessage(nppData._nppHandle, NPPM_INTERNAL_DOCORDERCHANGED, 0, src_id);
+
+	return FALSE;
+}
+
+void SwapPrev()
+{
+	EnumChildWindows(nppData._nppHandle, SwapTab, -1);
+}
+
+void SwapNext()
+{
+	EnumChildWindows(nppData._nppHandle, SwapTab, 1);
+}
